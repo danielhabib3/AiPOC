@@ -110,7 +110,12 @@ namespace AiPOC.Repositories
                 HasHeaderRecord = true,
             };
 
-            using var reader = new StreamReader(config.FaqDataPath);
+            var path = Path.Combine(
+                Directory.GetCurrentDirectory(),
+                config.FaqDataPath
+            );
+
+            using var reader = new StreamReader(path);
             using var csv = new CsvReader(reader, csvConfig);
             var faqs = csv.GetRecords<Faq>().ToList();
             return faqs;

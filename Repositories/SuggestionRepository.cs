@@ -88,7 +88,11 @@ namespace AiPOC.Repositories
         // </inheritdoc />
         public override List<string> GetDataFromCsv(MilvusConfiguration config)
         {
-            using var reader = new StreamReader(config.SuggestionDataPath);
+            var path = Path.Combine(
+                Directory.GetCurrentDirectory(),
+                config.SuggestionDataPath
+            );
+            using var reader = new StreamReader(path);
 
             var lines = reader
                 .ReadToEnd()
