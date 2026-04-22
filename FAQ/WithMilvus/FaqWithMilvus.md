@@ -1,331 +1,145 @@
-# FAQWithMilvus — Technical Documentation
+# FaqWithMilvus
+
+**Namespace:** `AiPOC.FAQ.WithMilvus`  
+**File:** `FaqWithMilvus.cs`
 
 ## Overview
 
-`FAQWithMilvus` is a C# console application that loads FAQ entries from a CSV file, generates vector embeddings using one of four AI providers (Gemini, VoyageAI/Claude, Mistral, OpenAI), stores them in a [Milvus](https://milvus.io/) vector database, and exposes an interactive semantic search interface.
-
-Each FAQ entry is embedded three ways — by question, by answer, and by their combination — enabling flexible similarity search across all three axes.
-
----
-
-## Table of Contents
-
-1. [Architecture](#architecture)
-2. [Dependencies](#dependencies)
-3. [Configuration](#configuration)
-   - [API Keys](#api-keys)
-   - [Milvus Ports](#milvus-ports)
-   - [Embedding Dimensions](#embedding-dimensions)
-4. [Data Model](#data-model)
-   - [Faq Class](#faq-class)
-   - [Milvus Collection Schema](#milvus-collection-schema)
-5. [Embedding Providers](#embedding-providers)
-6. [Core Workflow](#core-workflow)
-   - [Entry Point](#entry-point)
-   - [Provider Selection](#provider-selection)
-   - [Collection Initialization](#collection-initialization)
-   - [FAQ Seeding](#faq-seeding)
-   - [Interactive Search Menu](#interactive-search-menu)
-7. [Methods Reference](#methods-reference)
-8. [Error Handling & Retry Logic](#error-handling--retry-logic)
-9. [Extending the Application](#extending-the-application)
-
----
-
-## Architecture
-
-```
-┌──────────────────────────────────────────────────────────────┐
-│                        Console App                           │
-│                                                              │
-│  faq_washme.csv ──► CsvHelper ──► List<Faq>                 │
-│                                         │                    │
-│                                    Embedding                 │
-│                                    Provider                  │
-│                              ┌─────────┴──────────┐         │
-│                           Gemini  Claude  Mistral  OpenAI    │
-│                              └─────────┬──────────┘         │
-│                                   float[]                    │
-│                                        │                     │
-│              ┌─────────────────────────▼──────────────────┐ │
-│              │              Milvus (per-provider port)     │ │
-│              │  id | question | answer | question_vector   │ │
-│              │              | answer_vector | qa_vector    │ │
-│              └────────────────────────────────────────────┘ │
-│                                        │                     │
-│                              Search Query ──► Ranked Results │
-└──────────────────────────────────────────────────────────────┘
-```
+`FaqWithMilvus` is an interactive console application that performs **semantic FAQ search** using [Milvus](https://milvus.io/) as the vector database. It supports four embedding providers and lets the user search FAQ entries by question, answer, or a combined question+answer vector, ranking results by L2 distance.
 
 ---
 
 ## Dependencies
 
-| Package | Purpose |
+| Package / Namespace | Purpose |
 |---|---|
-| `CsvHelper` | Parsing `faq_washme.csv` |
-| `Milvus.Client` | Communicating with the Milvus vector database |
-| `System.Text.Json` | Serializing/deserializing embedding API payloads |
-| `System.Net.Http` | Making HTTP calls to embedding providers |
+| `Milvus.Client` | Milvus vector database client |
+| `AiPOC.EmbeddingProviders` | Abstraction over embedding APIs (Gemini, Claude, Mistral, OpenAI) |
+| `AiPOC.Milvus` | Milvus utilities (retry logic, field extraction) |
+| `AiPOC.Repositories` | FAQ data access and collection management |
+| `AiPOC.Configurations` | Strongly-typed app configuration |
 
 ---
 
-## Configuration
+## Architecture & Flow
 
-All configuration constants are defined as `private const` fields at the top of `FAQWithMilvus`.
-
-### API Keys
-
-| Constant | Provider | Default value |
-|---|---|---|
-| `GeminiApiKey` | Google Gemini | `"AIzaSy..."` |
-| `VoyageApiKey` | VoyageAI (Claude embeddings) | `"pa-wQ..."` |
-| `MistralApiKey` | Mistral AI | `"Fh4sQH..."` |
-| `OpenAiApiKey` | OpenAI | `"MY_API_KEY"` |
-
-> **Security note:** API keys are hardcoded in the source. For production use, load them from environment variables or a secrets manager.
-
-### Milvus Ports
-
-Each provider stores its embeddings in a **separate Milvus instance** (different port), preventing dimension conflicts between providers.
-
-| Provider | Port |
-|---|---|
-| Gemini | `19532` |
-| Claude (VoyageAI) | `19531` |
-| Mistral | `19533` |
-| OpenAI | `19534` |
-
-All instances run on `127.0.0.1`.
-
-### Embedding Dimensions
-
-| Provider | Model | Dimension |
-|---|---|---|
-| Gemini | `gemini-embedding-001` | 3072 |
-| Claude / VoyageAI | `voyage-3.5` | 1024 |
-| Mistral | `mistral-embed` | 1024 |
-| OpenAI | `text-embedding-3-large` | 3072 |
+```
+RunFaqWithMilvus()
+│
+├── ReadEmbeddingProvider()        ← user selects AI provider
+│
+├── MilvusClient                   ← connect to Milvus
+├── faqRepository.CreateCollectionAsync()
+├── faqRepository.EnsureDataInCollectionAsync()
+├── PrintAllFaqsAsync()            ← display all stored FAQs
+│
+└── Search loop
+    ├── User picks search mode (question / answer / combined)
+    ├── provider.GetEmbeddingAsync()   ← embed the query
+    └── collection.SearchAsync()       ← ANN search (L2)
+        └── Print ranked results
+```
 
 ---
 
-## Data Model
+## Methods
 
-### Faq Class
+### `RunFaqWithMilvus` (public, static, async)
 
 ```csharp
-public class Faq
-{
-    public string Question { get; set; } = string.Empty;
-    public string Answer   { get; set; } = string.Empty;
-}
+public static async Task RunFaqWithMilvus(
+    EmbeddingServiceConfiguration embeddingConfig,
+    FaqRepository faqRepository)
 ```
 
-Loaded from `faq_washme.csv` using `;` as the delimiter with a header row.
+Main entry point. Runs two nested loops:
 
-### Milvus Collection Schema
+- **Outer loop** — lets the user switch embedding provider without restarting the app.
+- **Inner loop** — presents the search menu and handles individual queries.
 
-Each provider gets its own collection named `faqs_<provider>` (e.g. `faqs_gemini`).
+**Parameters**
 
-| Field | Type | Description |
+| Parameter | Type | Description |
 |---|---|---|
-| `id` | `long` | Auto-generated primary key |
-| `question` | `varchar(1024)` | Raw FAQ question text |
-| `answer` | `varchar(4096)` | Raw FAQ answer text |
-| `question_vector` | `float_vector(D)` | Embedding of the question only |
-| `answer_vector` | `float_vector(D)` | Embedding of the answer only |
-| `qa_vector` | `float_vector(D)` | Embedding of `"question answer"` (concatenated) |
+| `embeddingConfig` | `EmbeddingServiceConfiguration` | API keys/endpoints for all providers and Milvus connection settings |
+| `faqRepository` | `FaqRepository` | Handles collection creation, CSV loading, data insertion, and field-name constants |
 
-`D` is the dimension for the selected provider (see [Embedding Dimensions](#embedding-dimensions)).
+**Inner loop menu options**
 
-An `AutoIndex` with `L2` metric type is created on all three vector fields at collection creation time.
+| Choice | Action |
+|---|---|
+| `1` | Search by **question** vector |
+| `2` | Search by **answer** vector |
+| `3` | Search by **combined Q+A** vector |
+| `4` | Return to provider selection |
+| `0` | Exit the application |
+
+**Search behaviour**
+
+1. Reads a free-text query from the console.
+2. Calls `provider.GetEmbeddingAsync()` to obtain a float vector.
+3. Executes `collection.SearchAsync()` with `SimilarityMetricType.L2` against all stored entities.
+4. Sorts results ascending by L2 distance (smallest = most similar) and prints each FAQ with its distance score.
 
 ---
 
-## Embedding Providers
-
-The application abstracts the embedding call behind a delegate:
+### `ReadEmbeddingProvider` (private, static)
 
 ```csharp
-Func<HttpClient, string, Task<List<float>?>> embeddingFunc
+static EmbeddingProvider ReadEmbeddingProvider(EmbeddingServiceConfiguration config)
 ```
 
-### Gemini
+Prompts the user to choose an embedding provider and returns the corresponding provider instance. Loops until a valid choice is entered.
 
-- **Endpoint:** `https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent`
-- **Auth:** `x-goog-api-key` header
-- **Task type:** `SEMANTIC_SIMILARITY`
-- **Response path:** `embedding.values[]`
+**Supported providers**
 
-### VoyageAI (Claude)
+| Choice | Provider class | Underlying API |
+|---|---|---|
+| `1` | `GeminiEmbeddingProvider` | Google Gemini |
+| `2` | `ClaudeEmbeddingProvider` | Anthropic / VoyageAI |
+| `3` | `MistralEmbeddingProvider` | Mistral AI |
+| `4` | `OpenAiEmbeddingProvider` | OpenAI |
 
-- **Endpoint:** `https://api.voyageai.com/v1/embeddings`
-- **Auth:** `Authorization: Bearer <key>`
-- **Model:** `voyage-3.5`
-- **Response path:** `data[0].embedding[]`
-
-### Mistral
-
-- **Endpoint:** `https://api.mistral.ai/v1/embeddings`
-- **Auth:** `Authorization: Bearer <key>`
-- **Model:** `mistral-embed`
-- **Response path:** `data[0].embedding[]`
-
-### OpenAI
-
-- **Endpoint:** `https://api.openai.com/v1/embeddings`
-- **Auth:** `Authorization: Bearer <key>`
-- **Model:** `text-embedding-3-large`
-- **Response path:** `data[0].embedding[]`
+**Returns:** A configured `EmbeddingProvider` instance ready for embedding generation.
 
 ---
 
-## Core Workflow
+### `PrintAllFaqsAsync` (private, static, async)
 
-### Entry Point
-
-`RunFAQWithMilvus()` is the main async method. It runs an outer loop that allows switching providers, and an inner loop for the interactive search menu.
-
-```
-RunFAQWithMilvus()
- └── ReadEmbeddingProvider()           // select AI provider
- └── Connect to Milvus
- └── CreateCollectionAsync()           // if not exists
-     └── CreateIndexAsync()            // on all 3 vector fields
- └── Load faq_washme.csv
- └── EnsureFaqsInCollectionAsync()     // seed missing entries
- └── PrintAllFaqsAsync()               // display all FAQs
- └── Interactive menu loop
-     └── SearchAsync()                 // semantic search
+```csharp
+static async Task PrintAllFaqsAsync(MilvusCollection collection, FaqRepository faqRepository)
 ```
 
-### Provider Selection
+Fetches and displays every FAQ entry currently stored in the collection. Called once after data ingestion so the user can see what is available before searching.
 
-`ReadEmbeddingProvider()` loops until a valid choice (`1`–`4`) is entered. Returns an `EmbeddingProvider` enum value.
+**Parameters**
 
-```
-=== CHOIX IA ===
-1. Gemini  (actif)
-2. Claude  (VoyageAI)
-3. Mistral
-4. OpenAI
-```
+| Parameter | Type | Description |
+|---|---|---|
+| `collection` | `MilvusCollection` | The active Milvus collection to query |
+| `faqRepository` | `FaqRepository` | Provides field-name constants for the query |
 
-### Collection Initialization
+**Details**
 
-If the collection does not yet exist in Milvus:
-1. The schema (6 fields) is created.
-2. `AutoIndex` (L2) indexes are built on `question_vector`, `answer_vector`, and `qa_vector`.
-
-### FAQ Seeding
-
-`EnsureFaqsInCollectionAsync()` performs an **idempotent upsert**:
-
-1. Loads all existing questions from Milvus into a `HashSet<string>` (case-insensitive).
-2. Filters the CSV list to entries **not** already present.
-3. For each missing FAQ, generates three embeddings (Q, A, Q+A) and inserts a row.
-4. Flushes and reloads the collection.
-
-This ensures the same CSV can be run multiple times without duplicating data.
-
-### Interactive Search Menu
-
-```
-=== MENU FAQ ===
-1. Rechercher par question          → searches question_vector
-2. Rechercher par réponse           → searches answer_vector
-3. Rechercher (question + réponse)  → searches qa_vector
-4. Retour (changer de fournisseur)
-0. Quitter
-```
-
-For a given query string:
-1. The query is embedded using the active provider.
-2. `SearchAsync()` is called against the selected vector field with L2 metric.
-3. Results are ranked by ascending L2 distance (closer = more similar).
-4. All matching FAQs are printed with their distance score.
+- Uses a `QueryAsync("id >= 0")` expression to retrieve all rows (up to the Milvus maximum of **16 384** per call).
+- Outputs `(aucun contenu)` if the collection is empty.
 
 ---
 
-## Methods Reference
+## Search Vector Fields
 
-### `RunFAQWithMilvus()`
-Main entry point. Orchestrates provider selection, collection setup, seeding, and the search menu loop.
+The vector field used for a search is resolved from `FaqRepository`:
 
-### `ReadEmbeddingProvider()` → `EmbeddingProvider`
-Prompts the user to select an embedding provider. Loops on invalid input.
-
-### `EnsureFaqsInCollectionAsync(collection, httpClient, embeddingFunc, faqs)`
-Idempotent seeding method. Inserts only FAQ entries absent from the collection. Generates all three vector representations per entry.
-
-### `GetAllQuestionsAsync(collection)` → `List<string>`
-Queries Milvus for all existing `question` field values (up to 16 384 rows).
-
-### `PrintAllFaqsAsync(collection)`
-Fetches and prints all FAQ question/answer pairs stored in the collection.
-
-### `ExtractFieldValues(fieldsData, targetField)` → `List<string>`
-Reflection-based helper that extracts string values from a Milvus `FieldData` list by field name. Handles both `IEnumerable<string>` and `IEnumerable<object>` data shapes.
-
-### `GetEmbeddingGeminiAsync(client, text)` → `List<float>?`
-Calls the Gemini embedding API. Returns `null` on failure.
-
-### `GetEmbeddingClaudeAsync(client, text)` → `List<float>?`
-Calls the VoyageAI embedding API. Returns `null` on failure.
-
-### `GetEmbeddingMistralAsync(client, text)` → `List<float>?`
-Calls the Mistral embedding API. Returns `null` on failure.
-
-### `GetEmbeddingOpenAiAsync(client, text)` → `List<float>?`
-Calls the OpenAI embedding API. Returns `null` on failure.
-
-### `ExecuteWithRateLimitRetryAsync(action, maxRetries = 4)`
-Generic retry wrapper for Milvus operations. Catches `MilvusException` on transient errors and applies **exponential backoff** (capped at 30 s).
-
-### `IsTransientMilvusError(ex)` → `bool`
-Returns `true` if the exception message contains any of: `RateLimit`, `rate limit`, `NoReplicaAvailable`, `channel not available`.
-
-### `GetMilvusPort(provider)` → `int`
-Maps `EmbeddingProvider` → Milvus port number.
-
-### `GetEmbeddingDimension(provider)` → `int`
-Maps `EmbeddingProvider` → vector dimension.
-
-### `GetCollectionName(provider)` → `string`
-Maps `EmbeddingProvider` → Milvus collection name (`faqs_gemini`, `faqs_claude`, `faqs_mistral`, `faqs_openai`).
-
----
-
-## Error Handling & Retry Logic
-
-All Milvus calls are wrapped in `ExecuteWithRateLimitRetryAsync`. The retry strategy is:
-
-| Attempt | Wait before retry |
+| Field constant | Represents |
 |---|---|
-| 1st | 10 s |
-| 2nd | 20 s |
-| 3rd | 30 s (capped) |
-| 4th | 30 s (capped) |
-
-After `maxRetries` (default 4) failed attempts, the exception propagates.
-
-Embedding API failures return `null` and are logged to the console; the corresponding FAQ entry is skipped during seeding, and the search is aborted with an informational message.
+| `FieldQuestionVector` | Embedding of the FAQ question only |
+| `FieldAnswerVector` | Embedding of the FAQ answer only |
+| `FieldQaVector` | Embedding of the concatenated question + answer |
 
 ---
 
-## Extending the Application
+## Notes
 
-### Adding a new embedding provider
-
-1. Add a new value to the `EmbeddingProvider` enum.
-2. Implement a `GetEmbeddingXxxAsync(HttpClient, string)` method.
-3. Add a new `MilvusPortXxx` and `XxxEmbeddingDimension` constant.
-4. Wire the new provider into `ReadEmbeddingProvider()`, the `embeddingFunc` switch, `GetMilvusPort()`, `GetEmbeddingDimension()`, and `GetCollectionName()`.
-
-### Switching similarity metric
-
-Replace `SimilarityMetricType.L2` with `SimilarityMetricType.IP` (inner product / cosine) in both `CreateIndexAsync` and `SearchAsync` calls. Make sure embeddings are normalized if using inner product.
-
-### Loading FAQs from a different source
-
-Replace the `CsvReader` block in `RunFAQWithMilvus()` with any `List<Faq>` construction (database query, REST API, JSON file, etc.) — the rest of the pipeline is source-agnostic.
+- **Rate-limit resilience:** All Milvus calls are wrapped in `MilvusUtils.ExecuteWithRateLimitRetryAsync()`, which automatically retries on rate-limit errors.
+- **Result ranking:** L2 distance is used as the similarity metric. A lower score means higher similarity. Results are always sorted ascending before display.
+- **Search limit:** The search limit is dynamically set to the current entity count (`Math.Max(1, entityCount)`), ensuring every stored FAQ is ranked in the result set.

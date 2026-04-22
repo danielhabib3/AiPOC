@@ -19,34 +19,26 @@ namespace AiPOC
                 .GetSection("EmbeddingService")
                 .Get<EmbeddingServiceConfiguration>() ?? throw new Exception("Failed to load EmbeddingService configuration.");
 
-            RunSwaggerUI(args, embeddingConfig, builder);
+            var mode = args.Length > 0 ? args[0].ToLower() : "swagger";
 
-            //if (args.Length > 0)
-            //{
-            //    var mode = args[0].ToLower();
-            //    switch (mode)
-            //    {
-            //        case "swagger":
-            //            RunSwaggerUI(args, embeddingConfig, builder);
-            //            break;
-            //        case "faq-milvus":
-            //            RunFaqWithMilvusInConsole(args, embeddingConfig, builder).GetAwaiter().GetResult();
-            //            break;
-            //        case "suggestion-milvus":
-            //            RunSuggestionWithMilvusInConsole(args, embeddingConfig, builder).GetAwaiter().GetResult();
-            //            break;
-            //        case "suggestion-without-milvus":
-            //            RunSuggestionWithoutMilvusInConsole(args, embeddingConfig, builder).GetAwaiter().GetResult();
-            //            break;
-            //        default:
-            //            Console.WriteLine("Invalid mode specified. Use 'swagger', 'faq-milvus', 'suggestion-milvus', or 'suggestion-without-milvus'.");
-            //            break;
-            //    }
-            //}
-            //else
-            //{
-            //    Console.WriteLine("No mode specified. Use 'swagger', 'faq-milvus', 'suggestion-milvus', or 'suggestion-without-milvus' as a command-line argument.");
-            //}
+            switch (mode)
+            {
+                case "swagger":
+                    RunSwaggerUI(args, embeddingConfig, builder);
+                    break;
+                case "faq-milvus":
+                    RunFaqWithMilvusInConsole(args, embeddingConfig, builder).GetAwaiter().GetResult();
+                    break;
+                case "suggestion-milvus":
+                    RunSuggestionWithMilvusInConsole(args, embeddingConfig, builder).GetAwaiter().GetResult();
+                    break;
+                case "suggestion-without-milvus":
+                    RunSuggestionWithoutMilvusInConsole(args, embeddingConfig, builder).GetAwaiter().GetResult();
+                    break;
+                default:
+                    Console.WriteLine("Invalid mode specified. Use 'swagger', 'faq-milvus', 'suggestion-milvus', or 'suggestion-without-milvus'.");
+                    break;
+            }
         }
 
         private static void RunSwaggerUI(string[] args, EmbeddingServiceConfiguration embeddingConfig, WebApplicationBuilder builder)

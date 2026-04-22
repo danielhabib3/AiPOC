@@ -9,5 +9,14 @@ In this folder there is a DB for each LLM used to vectorize the data. In each fo
 - `./standalone.bat stop` to stop the container with the DB
 - `./standalone.bat delete` to delete the container with the DB and all the data stored in it.
 
-To add a LLM to the project, you need to create a new folder with the name of the LLM and add a standalone.bat file with the same commands as the other standalone.bat files.
-It's important to change the port on which the container runs and add it to the appsetting.json. You alo have to add an implementation of the class EmbeddingProvider and oveeride the abstract methods of the class
+To add a LLM to the project, you need to :
+1. Create a new folder with the name of the LLM 
+2. Add a standalone.bat file with the same commands as the other standalone.bat files
+3. Rename the file standalone.bat to standalone-LLMName.bat and add it to the Makefile.
+4. In the standalone.bat file:
+	- Rename embedEtcd.yaml to embedEtcd-LLMName.yaml
+	- Rename volumes to volumes-LLMName
+	- Rename user.yaml to user-LLMName.yaml
+5. It's important to change the port on which the container runs and add it to the appsetting.json.
+6. Add Api key and Url of the LLM to the appsetting.json file.
+7. You also have to add an implementation of the class EmbeddingProvider and override the abstract methods of the class.

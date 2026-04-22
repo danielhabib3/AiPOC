@@ -18,15 +18,13 @@ namespace AiPOC.Suggestion.WithoutMilvus
             using var httpClient = new HttpClient();
             string projectDirectory = GetSourceFolderPath();
             
-            // Fichier source contenant les instructions/textes
-            string sourceCsvPath = Path.Combine(projectDirectory, "instructions_chubb.csv");
+            string sourceCsvPath = Path.Combine(projectDirectory, embeddingConfig.Milvus.SuggestionDataPath);
 
             while (true)
             {
                 EmbeddingProvider provider = ReadEmbeddingProvider(embeddingConfig);
                 string vectorizedFileName = $"embeddings_{provider.ProviderName.ToLower()}.csv";
 
-                // Assure que tout est vectorisé automatiquement avant d'afficher le menu
                 await EnsureDataVectorizedAsync(httpClient, provider, projectDirectory, vectorizedFileName, sourceCsvPath);
 
                 while (true)
@@ -73,10 +71,10 @@ namespace AiPOC.Suggestion.WithoutMilvus
 
                 switch (choice)
                 {
-                    case "1": return new GeminiEmbeddingProvider(config.Gemini, "instructions");
-                    case "2": return new ClaudeEmbeddingProvider(config.Claude, "instructions");
-                    case "3": return new MistralEmbeddingProvider(config.Mistral, "instructions");
-                    case "4": return new OpenAiEmbeddingProvider(config.OpenAi, "instructions");
+                    case "1": return new GeminiEmbeddingProvider(config.Gemini, config.Milvus.SuggestionCollectionPrefix);
+                    case "2": return new ClaudeEmbeddingProvider(config.Claude, config.Milvus.SuggestionCollectionPrefix);
+                    case "3": return new MistralEmbeddingProvider(config.Mistral, config.Milvus.SuggestionCollectionPrefix);
+                    case "4": return new OpenAiEmbeddingProvider(config.OpenAi, config.Milvus.SuggestionCollectionPrefix);
                     default: Console.WriteLine("Choix invalide."); break;
                 }
             }
@@ -90,10 +88,9 @@ namespace AiPOC.Suggestion.WithoutMilvus
                 return;
             }
 
-            // Lire les textes depuis le fichier source
             var csvConfig = new CsvConfiguration(CultureInfo.InvariantCulture)
             {
-                Delimiter = ";", // Ajustez au besoin selon votre CSV (" ; " ou " , ")
+                Delimiter = ";",
                 HasHeaderRecord = true,
                 MissingFieldFound = null,
                 BadDataFound = null
@@ -107,7 +104,6 @@ namespace AiPOC.Suggestion.WithoutMilvus
                 csv.ReadHeader();
                 while (csv.Read())
                 {
-                    // Suppose que la colonne s'appelle "Texte"
                     string text = csv.GetField<string>("Texte") ?? string.Empty;
                     if (!string.IsNullOrWhiteSpace(text))
                     {
@@ -119,7 +115,6 @@ namespace AiPOC.Suggestion.WithoutMilvus
             string destPath = Path.Combine(projectDirectory, destFileName);
             var existingTexts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-            // Créer le fichier d'embeddings avec l'en-tête s'il n'existe pas
             if (!File.Exists(destPath))
             {
                 using var initialWriter = new StreamWriter(destPath);
@@ -127,9 +122,8 @@ namespace AiPOC.Suggestion.WithoutMilvus
             }
             else
             {
-                // Lire ce qui est déjà vectorisé pour éviter les doublons
                 string[] lines = await File.ReadAllLinesAsync(destPath);
-                foreach (string line in lines.Skip(1)) // Skip header
+                foreach (string line in lines.Skip(1))
                 {
                     if (string.IsNullOrWhiteSpace(line)) continue;
                     
@@ -142,7 +136,6 @@ namespace AiPOC.Suggestion.WithoutMilvus
                 }
             }
 
-            // Obtenir ce qui manque
             var textsToVectorize = sourceTexts.Where(t => !existingTexts.Contains(t)).ToList();
 
             if (textsToVectorize.Count == 0)
@@ -155,7 +148,6 @@ namespace AiPOC.Suggestion.WithoutMilvus
 
             try
             {
-                // Append au fichier existant
                 using var writer = new StreamWriter(destPath, append: true);
                 
                 foreach (var text in textsToVectorize)
@@ -170,12 +162,12 @@ namespace AiPOC.Suggestion.WithoutMilvus
                     }
 
                     string vectorString = string.Join(",", embedding.Select(v => v.ToString(CultureInfo.InvariantCulture)));
-                    string sanitizedText = text.Replace("\"", "'"); // Évite de casser le CSV
+                    string sanitizedText = text.Replace("\"", "'");
                     
                     await writer.WriteLineAsync($"\"{sanitizedText}\";\"{vectorString}\"");
                     Console.WriteLine("[OK]");
 
-                    await Task.Delay(200); // Respecter les rate limits potentiels
+                    await Task.Delay(200);
                 }
                 Console.WriteLine("Mise à jour terminée !");
             }
