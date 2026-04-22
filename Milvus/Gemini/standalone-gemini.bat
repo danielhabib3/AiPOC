@@ -1,3 +1,4 @@
+cd /d %~dp0
 @echo off
 setlocal enabledelayedexpansion
 
@@ -53,9 +54,9 @@ docker run -d ^
     -e ETCD_CONFIG_PATH=/milvus/configs/embedEtcd-gemini.yaml ^
     -e COMMON_STORAGETYPE=local ^
     -e DEPLOY_MODE=STANDALONE ^
-    -v "%cd%\volumes-gemini:/var/lib/milvus" ^
-    -v "%cd%\embedEtcd-gemini.yaml:/milvus/configs/embedEtcd-gemini.yaml" ^
-    -v "%cd%\user-gemini.yaml:/milvus/configs/user-gemini.yaml" ^
+    -v "%~dp0volumes-gemini:/var/lib/milvus" ^
+    -v "%~dp0embedEtcd-gemini.yaml:/milvus/configs/embedEtcd-gemini.yaml" ^
+    -v "%~dp0user-gemini.yaml:/milvus/configs/user-gemini.yaml" ^
     -p 19532:19530 ^
     -p 9093:9091 ^
     -p 2381:2379 ^

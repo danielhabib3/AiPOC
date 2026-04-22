@@ -13,7 +13,7 @@
 @REM  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 @REM  See the License for the specific language governing permissions and
 @REM  limitations under the License.
-
+cd /d %~dp0
 @echo off
 setlocal enabledelayedexpansion
 
@@ -69,9 +69,9 @@ docker run -d ^
     -e ETCD_CONFIG_PATH=/milvus/configs/embedEtcd.yaml ^
     -e COMMON_STORAGETYPE=local ^
     -e DEPLOY_MODE=STANDALONE ^
-    -v "%cd%\volumes\milvus:/var/lib/milvus" ^
-    -v "%cd%\embedEtcd.yaml:/milvus/configs/embedEtcd.yaml" ^
-    -v "%cd%\user.yaml:/milvus/configs/user.yaml" ^
+    -v "%~dp0volumes\milvus:/var/lib/milvus" ^
+    -v "%~dp0embedEtcd.yaml:/milvus/configs/embedEtcd.yaml" ^
+    -v "%~dp0user.yaml:/milvus/configs/user.yaml" ^
     -p 19530:19530 ^
     -p 9091:9091 ^
     -p 2379:2379 ^

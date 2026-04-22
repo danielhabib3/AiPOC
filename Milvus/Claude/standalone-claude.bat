@@ -1,3 +1,4 @@
+cd /d %~dp0
 @echo off
 setlocal enabledelayedexpansion
 
@@ -53,9 +54,9 @@ docker run -d ^
     -e ETCD_CONFIG_PATH=/milvus/configs/embedEtcd-claude.yaml ^
     -e COMMON_STORAGETYPE=local ^
     -e DEPLOY_MODE=STANDALONE ^
-    -v "%cd%\volumes-claude:/var/lib/milvus" ^
-    -v "%cd%\embedEtcd-claude.yaml:/milvus/configs/embedEtcd-claude.yaml" ^
-    -v "%cd%\user-claude.yaml:/milvus/configs/user-claude.yaml" ^
+    -v "%~dp0volumes-claude:/var/lib/milvus" ^
+    -v "%~dp0embedEtcd-claude.yaml:/milvus/configs/embedEtcd-claude.yaml" ^
+    -v "%~dp0user-claude.yaml:/milvus/configs/user-claude.yaml" ^
     -p 19531:19530 ^
     -p 9092:9091 ^
     -p 2380:2379 ^

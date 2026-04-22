@@ -1,3 +1,4 @@
+cd /d %~dp0
 @echo off
 setlocal enabledelayedexpansion
 
@@ -53,9 +54,9 @@ docker run -d ^
 -e ETCD_CONFIG_PATH=/milvus/configs/embedEtcd-openai.yaml ^
 -e COMMON_STORAGETYPE=local ^
 -e DEPLOY_MODE=STANDALONE ^
--v "%cd%\volumes-openai:/var/lib/milvus" ^
--v "%cd%\embedEtcd-openai.yaml:/milvus/configs/embedEtcd-openai.yaml" ^
--v "%cd%\user-openai.yaml:/milvus/configs/user-openai.yaml" ^
+-v "%~dp0volumes-openai:/var/lib/milvus" ^
+-v "%~dp0embedEtcd-openai.yaml:/milvus/configs/embedEtcd-openai.yaml" ^
+-v "%~dp0user-openai.yaml:/milvus/configs/user-openai.yaml" ^
 -p 19534:19530 ^
 -p 9095:9091 ^
 -p 2383:2379 ^
