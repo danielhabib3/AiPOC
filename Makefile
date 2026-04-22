@@ -7,6 +7,7 @@ start:
 	Milvus\OpenAi\standalone-openai.bat start
 
 delete:
+	make stop
 	Milvus\Claude\standalone-claude.bat delete
 	Milvus\Gemini\standalone-gemini.bat delete
 	Milvus\Mistral\standalone-mistral.bat delete

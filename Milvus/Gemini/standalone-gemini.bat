@@ -131,17 +131,11 @@ echo Delete Milvus container successfully.
 goto :eof
 
 :delete
-set /p check="Please confirm if you'd like to proceed with the delete. This operation will delete the container and data. Confirm with 'y' for yes or 'n' for no. > "
-if /i "%check%"=="y" (
-    call :delete_container
-    rmdir /s /q "%cd%\volumes-gemini"
-    del /q embedEtcd-gemini.yaml
-    del /q user-gemini.yaml
-    echo Delete successfully.
-) else (
-    echo Exit delete
-    exit /b 0
-)
+call :delete_container
+rmdir /s /q "%~dp0volumes-gemini"
+del /q "%~dp0embedEtcd-gemini.yaml"
+del /q "%~dp0user-gemini.yaml"
+echo Delete successfully.
 goto :eof
 
 :EOF
