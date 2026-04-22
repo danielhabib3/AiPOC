@@ -91,24 +91,23 @@ namespace AiPOC.Suggestion.WithoutMilvus
             var csvConfig = new CsvConfiguration(CultureInfo.InvariantCulture)
             {
                 Delimiter = ";",
-                HasHeaderRecord = true,
+                HasHeaderRecord = false,
                 MissingFieldFound = null,
                 BadDataFound = null
             };
 
             var sourceTexts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            using (var reader = new StreamReader(sourceCsvPath))
-            using (var csv = new CsvReader(reader, csvConfig))
+
+            using var reader = new StreamReader(sourceCsvPath);
+            using var csv = new CsvReader(reader, csvConfig);
+
+            while (csv.Read())
             {
-                csv.Read();
-                csv.ReadHeader();
-                while (csv.Read())
+                var text = csv.GetField(0)?.Trim();
+
+                if (!string.IsNullOrWhiteSpace(text))
                 {
-                    string text = csv.GetField<string>("Texte") ?? string.Empty;
-                    if (!string.IsNullOrWhiteSpace(text))
-                    {
-                        sourceTexts.Add(text.Trim());
-                    }
+                    sourceTexts.Add(text);
                 }
             }
 
