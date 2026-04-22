@@ -18,7 +18,7 @@ namespace AiPOC.Suggestion.WithoutMilvus
             using var httpClient = new HttpClient();
             string projectDirectory = GetSourceFolderPath();
             
-            string sourceCsvPath = Path.Combine(projectDirectory, embeddingConfig.Milvus.SuggestionDataPath);
+            string sourceCsvPath = Path.Combine(Directory.GetParent(projectDirectory)!.FullName, "instructions_chubb.csv");
 
             while (true)
             {
